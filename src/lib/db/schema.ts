@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
 );
 
 -- ============================================
--- TRANSACTIONS
+-- TRANSACTIONS (with credit support)
 -- ============================================
 CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
@@ -146,7 +146,10 @@ CREATE TABLE IF NOT EXISTS transactions (
   tax REAL DEFAULT 0,
   discount REAL DEFAULT 0,
   total REAL DEFAULT 0,
+  paid_amount REAL DEFAULT 0,
   payment_method TEXT DEFAULT 'cash',
+  payment_status TEXT CHECK(payment_status IN ('paid', 'partial', 'unpaid')) DEFAULT 'paid',
+  due_date TEXT,
   status TEXT CHECK(status IN ('pending', 'completed', 'cancelled')) DEFAULT 'completed',
   notes TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -167,6 +170,20 @@ CREATE TABLE IF NOT EXISTS transaction_items (
   FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
   FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
 );
+
+-- ============================================
+-- CREDIT PAYMENTS (for installments)
+-- ============================================
+CREATE TABLE IF NOT EXISTS credit_payments (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL,
+  amount REAL NOT NULL,
+  payment_method TEXT DEFAULT 'cash',
+  notes TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+);
+
 
 -- ============================================
 -- EXPENSES

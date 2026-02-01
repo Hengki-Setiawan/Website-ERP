@@ -59,6 +59,7 @@ export default function Sidebar() {
             items: [
                 { href: '/dashboard/pos', label: 'Kasir (POS)', icon: ShoppingCart },
                 { href: '/dashboard/transactions', label: 'Penjualan', icon: Receipt },
+                { href: '/dashboard/credits', label: 'Hutang', icon: Wallet },
                 { href: '/dashboard/expenses', label: 'Pengeluaran', icon: Wallet },
             ]
         },

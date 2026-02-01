@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { useSettingsStore } from '@/lib/store';
 import {
@@ -15,7 +15,10 @@ import {
     CheckCircle,
     Loader2,
     Package,
-    User
+    User,
+    Clock,
+    Printer,
+    Calendar
 } from 'lucide-react';
 
 interface Product {
@@ -45,12 +48,40 @@ export default function POSPage() {
     const [cart, setCart] = useState<CartItem[]>([]);
     const [search, setSearch] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState<string>('');
-    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'qris'>('cash');
+    const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'qris' | 'credit'>('cash');
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
-    const [lastTransactionId, setLastTransactionId] = useState('');
+    const [lastTransaction, setLastTransaction] = useState<{ id: string; total: number } | null>(null);
     const [error, setError] = useState('');
+
+    // Credit payment options
+    const [dueDate, setDueDate] = useState('');
+    const [downPayment, setDownPayment] = useState('');
+
+    // Receipt modal
+    const [showReceipt, setShowReceipt] = useState(false);
+
+    const searchRef = useRef<HTMLInputElement>(null);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'F1') {
+                e.preventDefault();
+                searchRef.current?.focus();
+            } else if (e.key === 'F2' && cart.length > 0) {
+                e.preventDefault();
+                processTransaction();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setCart([]);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [cart]);
 
     // Fetch products and customers
     useEffect(() => {
@@ -74,6 +105,11 @@ export default function POSPage() {
         };
 
         fetchData();
+
+        // Set default due date to 7 days from now
+        const defaultDue = new Date();
+        defaultDue.setDate(defaultDue.getDate() + 7);
+        setDueDate(defaultDue.toISOString().split('T')[0]);
     }, []);
 
     // Filter products
@@ -141,29 +177,47 @@ export default function POSPage() {
             return;
         }
 
+        if (paymentMethod === 'credit' && !selectedCustomer) {
+            setError('Pilih pelanggan untuk pembayaran kredit!');
+            return;
+        }
+
         setProcessing(true);
         setError('');
 
         try {
+            const payload: Record<string, unknown> = {
+                type: 'sale',
+                customerId: selectedCustomer || null,
+                items: cart,
+                tax,
+                paymentMethod: paymentMethod === 'credit' ? 'cash' : paymentMethod,
+            };
+
+            // Handle credit payment
+            if (paymentMethod === 'credit') {
+                payload.paymentStatus = downPayment && parseFloat(downPayment) > 0 ? 'partial' : 'unpaid';
+                payload.paidAmount = downPayment ? parseFloat(downPayment) : 0;
+                payload.dueDate = dueDate;
+            } else {
+                payload.paymentStatus = 'paid';
+            }
+
             const res = await fetch('/api/transactions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: 'sale',
-                    customerId: selectedCustomer || null,
-                    items: cart,
-                    tax,
-                    paymentMethod,
-                }),
+                body: JSON.stringify(payload),
             });
 
             const data = await res.json();
 
             if (data.success) {
-                setLastTransactionId(data.data.id);
+                setLastTransaction({ id: data.data.id, total: data.data.total });
                 setShowSuccess(true);
+                setShowReceipt(true);
                 setCart([]);
                 setSelectedCustomer('');
+                setDownPayment('');
 
                 // Refresh products to get updated stock
                 const productsRes = await fetch('/api/products');
@@ -181,6 +235,11 @@ export default function POSPage() {
         }
     };
 
+    // Print receipt
+    const printReceipt = () => {
+        window.print();
+    };
+
     // Format currency
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
@@ -188,15 +247,23 @@ export default function POSPage() {
 
     return (
         <DashboardLayout>
-            <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-8rem)]">
+            {/* Keyboard shortcuts hint */}
+            <div className="mb-4 flex gap-4 text-xs text-gray-500">
+                <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">F1: Cari</span>
+                <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">F2: Bayar</span>
+                <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">Esc: Clear</span>
+            </div>
+
+            <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-10rem)]">
                 {/* Products Section */}
                 <div className="flex-1 flex flex-col">
                     <div className="mb-4">
                         <div className="relative">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                             <input
+                                ref={searchRef}
                                 type="text"
-                                placeholder="Cari produk..."
+                                placeholder="Cari produk... (F1)"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
@@ -216,8 +283,8 @@ export default function POSPage() {
                                     onClick={() => addToCart(product)}
                                     disabled={product.stock <= 0}
                                     className={`p-4 rounded-xl border text-left transition-all ${product.stock <= 0
-                                            ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
-                                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-md'
+                                        ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
+                                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:shadow-md'
                                         }`}
                                 >
                                     <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-2">
@@ -319,25 +386,56 @@ export default function POSPage() {
                         </div>
 
                         {/* Payment Methods */}
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-4 gap-2">
                             {[
                                 { id: 'cash', icon: Banknote, label: 'Tunai' },
                                 { id: 'card', icon: CreditCard, label: 'Kartu' },
                                 { id: 'qris', icon: QrCode, label: 'QRIS' },
+                                { id: 'credit', icon: Clock, label: 'Kredit' },
                             ].map((method) => (
                                 <button
                                     key={method.id}
-                                    onClick={() => setPaymentMethod(method.id as 'cash' | 'card' | 'qris')}
-                                    className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-xl border transition-all ${paymentMethod === method.id
-                                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600'
-                                            : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400'
+                                    onClick={() => setPaymentMethod(method.id as 'cash' | 'card' | 'qris' | 'credit')}
+                                    className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${paymentMethod === method.id
+                                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600'
+                                        : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400'
                                         }`}
                                 >
-                                    <method.icon size={20} />
-                                    <span className="text-xs font-medium">{method.label}</span>
+                                    <method.icon size={18} />
+                                    <span className="text-[10px] font-medium">{method.label}</span>
                                 </button>
                             ))}
                         </div>
+
+                        {/* Credit Options */}
+                        {paymentMethod === 'credit' && (
+                            <div className="space-y-3 p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        <Calendar size={12} className="inline mr-1" />
+                                        Jatuh Tempo
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={dueDate}
+                                        onChange={(e) => setDueDate(e.target.value)}
+                                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        DP (Opsional)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={downPayment}
+                                        onChange={(e) => setDownPayment(e.target.value)}
+                                        placeholder="0"
+                                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm"
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         {/* Error */}
                         {error && (
@@ -350,7 +448,7 @@ export default function POSPage() {
                         {showSuccess && (
                             <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 text-sm text-center flex items-center justify-center gap-2">
                                 <CheckCircle size={18} />
-                                Transaksi berhasil!
+                                {paymentMethod === 'credit' ? 'Transaksi kredit berhasil!' : 'Transaksi berhasil!'}
                             </div>
                         )}
 
@@ -369,13 +467,63 @@ export default function POSPage() {
                             ) : (
                                 <>
                                     <ShoppingCart size={20} />
-                                    Bayar {formatCurrency(total)}
+                                    {paymentMethod === 'credit' ? 'Simpan Kredit' : `Bayar ${formatCurrency(total)}`}
                                 </>
                             )}
                         </button>
                     </div>
                 </div>
             </div>
+
+            {/* Receipt Modal */}
+            {showReceipt && lastTransaction && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:p-0 print:bg-white">
+                    <div className="bg-white rounded-2xl w-full max-w-sm print:max-w-none print:rounded-none print:shadow-none">
+                        {/* Receipt Content */}
+                        <div className="p-6 print:p-4" id="receipt">
+                            <div className="text-center mb-4">
+                                <h2 className="text-xl font-bold">{settings.businessName || 'Toko UMKM'}</h2>
+                                <p className="text-sm text-gray-500">{settings.businessAddress || ''}</p>
+                                <p className="text-sm text-gray-500">{settings.businessPhone || ''}</p>
+                            </div>
+
+                            <div className="border-t border-b border-dashed border-gray-300 py-3 my-3">
+                                <p className="text-xs text-gray-500">No: {lastTransaction.id.slice(0, 8).toUpperCase()}</p>
+                                <p className="text-xs text-gray-500">{new Date().toLocaleString('id-ID')}</p>
+                            </div>
+
+                            <div className="text-center py-4">
+                                <p className="text-2xl font-bold">{formatCurrency(lastTransaction.total)}</p>
+                                <p className="text-sm text-green-600 mt-1">
+                                    {paymentMethod === 'credit' ? '✓ KREDIT' : '✓ LUNAS'}
+                                </p>
+                            </div>
+
+                            <div className="border-t border-dashed border-gray-300 pt-3 text-center">
+                                <p className="text-xs text-gray-500">Terima kasih atas kunjungan Anda</p>
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-3 p-4 border-t print:hidden">
+                            <button
+                                onClick={() => setShowReceipt(false)}
+                                className="flex-1 py-2 rounded-lg border border-gray-300 text-gray-700"
+                            >
+                                Tutup
+                            </button>
+                            <button
+                                onClick={printReceipt}
+                                className="flex-1 py-2 rounded-lg text-white flex items-center justify-center gap-2"
+                                style={{ background: `linear-gradient(135deg, ${settings.primaryColor}, ${settings.secondaryColor})` }}
+                            >
+                                <Printer size={18} />
+                                Cetak
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </DashboardLayout>
     );
 }

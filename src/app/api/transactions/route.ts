@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { type, customerId, supplierId, items, tax, discount, paymentMethod, notes } = body;
+        const { type, customerId, supplierId, items, tax, discount, paymentMethod, paymentStatus, dueDate, paidAmount, notes } = body;
 
         if (!items || items.length === 0) {
             return NextResponse.json({ success: false, message: 'Items diperlukan' }, { status: 400 });
@@ -102,11 +102,31 @@ export async function POST(request: NextRequest) {
         const discountAmount = discount || 0;
         const total = subtotal + taxAmount - discountAmount;
 
+        // Handle credit payment
+        const finalPaymentStatus = paymentStatus || 'paid';
+        const finalPaidAmount = finalPaymentStatus === 'paid' ? total : (paidAmount || 0);
+
         // Insert transaction
         await client.execute({
-            sql: `INSERT INTO transactions (id, type, customer_id, supplier_id, subtotal, tax, discount, total, payment_method, status, notes, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)`,
-            args: [transactionId, type || 'sale', customerId || null, supplierId || null, subtotal, taxAmount, discountAmount, total, paymentMethod || 'cash', notes || null, now, now],
+            sql: `INSERT INTO transactions (id, type, customer_id, supplier_id, subtotal, tax, discount, total, paid_amount, payment_method, payment_status, due_date, status, notes, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)`,
+            args: [
+                transactionId,
+                type || 'sale',
+                customerId || null,
+                supplierId || null,
+                subtotal,
+                taxAmount,
+                discountAmount,
+                total,
+                finalPaidAmount,
+                paymentMethod || 'cash',
+                finalPaymentStatus,
+                dueDate || null,
+                notes || null,
+                now,
+                now
+            ],
         });
 
         // Insert items and update stock
@@ -132,11 +152,31 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({ success: true, message: 'Transaksi berhasil disimpan', data: { id: transactionId, total } });
+        // If partial payment, record the initial payment
+        if (finalPaymentStatus !== 'paid' && finalPaidAmount > 0) {
+            const paymentId = generateId();
+            await client.execute({
+                sql: `INSERT INTO credit_payments (id, transaction_id, amount, payment_method, notes, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+                args: [paymentId, transactionId, finalPaidAmount, paymentMethod || 'cash', 'Pembayaran awal', now],
+            });
+        }
+
+        return NextResponse.json({
+            success: true,
+            message: finalPaymentStatus === 'paid' ? 'Transaksi berhasil disimpan' : 'Transaksi kredit berhasil dicatat',
+            data: {
+                id: transactionId,
+                total,
+                paid: finalPaidAmount,
+                remaining: total - finalPaidAmount,
+                paymentStatus: finalPaymentStatus
+            }
+        });
     } catch (error) {
         return NextResponse.json({ success: false, message: error instanceof Error ? error.message : 'Gagal menyimpan transaksi' }, { status: 500 });
     }
 }
+
 
 export async function DELETE(request: NextRequest) {
     try {

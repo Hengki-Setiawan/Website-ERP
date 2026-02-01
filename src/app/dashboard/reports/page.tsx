@@ -13,8 +13,11 @@ import {
     Calendar,
     Loader2,
     AlertTriangle,
-    ArrowRight
+    ArrowRight,
+    Download,
+    FileSpreadsheet
 } from 'lucide-react';
+
 
 interface Summary {
     sales: { count: number; total: number };
@@ -123,6 +126,36 @@ export default function ReportsPage() {
         return labels[cat] || cat;
     };
 
+    const [exporting, setExporting] = useState<string | null>(null);
+
+    const handleExport = async (type: string) => {
+        setExporting(type);
+        try {
+            const [year, month] = period.split('-');
+            const startDate = new Date(parseInt(year), parseInt(month) - 1, 1).toISOString().split('T')[0];
+            const endDate = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
+
+            const url = `/api/export?type=${type}&format=csv&startDate=${startDate}&endDate=${endDate}`;
+
+            const res = await fetch(url);
+            const blob = await res.blob();
+
+            // Download file
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = `${type}_${period}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (err) {
+            setError('Gagal export data');
+        } finally {
+            setExporting(null);
+        }
+    };
+
     const periodLabel = () => {
         const [year, month] = period.split('-');
         return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
@@ -151,14 +184,40 @@ export default function ReportsPage() {
                     </p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <Calendar size={18} className="text-gray-400" />
-                    <input
-                        type="month"
-                        value={period}
-                        onChange={(e) => setPeriod(e.target.value)}
-                        className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                    />
+                <div className="flex items-center gap-3">
+                    {/* Export Buttons */}
+                    <div className="flex gap-2">
+                        {[
+                            { type: 'transactions', label: 'Penjualan' },
+                            { type: 'expenses', label: 'Pengeluaran' },
+                            { type: 'products', label: 'Produk' },
+                        ].map((item) => (
+                            <button
+                                key={item.type}
+                                onClick={() => handleExport(item.type)}
+                                disabled={exporting !== null}
+                                className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm disabled:opacity-50"
+                            >
+                                {exporting === item.type ? (
+                                    <Loader2 className="animate-spin" size={14} />
+                                ) : (
+                                    <Download size={14} />
+                                )}
+                                {item.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Period Selector */}
+                    <div className="flex items-center gap-2">
+                        <Calendar size={18} className="text-gray-400" />
+                        <input
+                            type="month"
+                            value={period}
+                            onChange={(e) => setPeriod(e.target.value)}
+                            className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        />
+                    </div>
                 </div>
             </div>
 
