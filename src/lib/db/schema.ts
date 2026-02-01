@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS suppliers (
   phone TEXT,
   address TEXT,
   notes TEXT,
+  bank_name TEXT,
+  bank_account TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -171,12 +173,17 @@ CREATE TABLE IF NOT EXISTS transaction_items (
 -- ============================================
 CREATE TABLE IF NOT EXISTS expenses (
   id TEXT PRIMARY KEY,
-  category TEXT NOT NULL,
+  description TEXT NOT NULL,
   amount REAL DEFAULT 0,
-  description TEXT,
-  date TEXT DEFAULT CURRENT_TIMESTAMP,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  category TEXT DEFAULT 'operasional',
+  expense_date TEXT DEFAULT CURRENT_TIMESTAMP,
+  payment_method TEXT DEFAULT 'cash',
+  receipt TEXT,
+  notes TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
 
 -- ============================================
 -- TUTORIALS
@@ -233,39 +240,39 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_date ON audit_logs(created_at);
 
 // Default settings to insert
 export const DEFAULT_SETTINGS = [
-    { key: 'business_name', value: 'Toko UMKM', category: 'business' },
-    { key: 'business_logo', value: '', category: 'business' },
-    { key: 'business_address', value: '', category: 'business' },
-    { key: 'business_phone', value: '', category: 'business' },
-    { key: 'business_email', value: '', category: 'business' },
-    { key: 'primary_color', value: '#3b82f6', category: 'theme' },
-    { key: 'secondary_color', value: '#10b981', category: 'theme' },
-    { key: 'accent_color', value: '#f59e0b', category: 'theme' },
-    { key: 'dark_mode', value: 'false', category: 'theme' },
-    { key: 'database_mode', value: 'local', category: 'database' },
-    { key: 'ai_provider', value: 'groq', category: 'ai' },
-    { key: 'ai_enabled', value: 'true', category: 'ai' },
-    { key: 'language', value: 'id', category: 'general' },
-    { key: 'currency', value: 'IDR', category: 'general' },
-    { key: 'timezone', value: 'Asia/Jakarta', category: 'general' },
+  { key: 'business_name', value: 'Toko UMKM', category: 'business' },
+  { key: 'business_logo', value: '', category: 'business' },
+  { key: 'business_address', value: '', category: 'business' },
+  { key: 'business_phone', value: '', category: 'business' },
+  { key: 'business_email', value: '', category: 'business' },
+  { key: 'primary_color', value: '#3b82f6', category: 'theme' },
+  { key: 'secondary_color', value: '#10b981', category: 'theme' },
+  { key: 'accent_color', value: '#f59e0b', category: 'theme' },
+  { key: 'dark_mode', value: 'false', category: 'theme' },
+  { key: 'database_mode', value: 'local', category: 'database' },
+  { key: 'ai_provider', value: 'groq', category: 'ai' },
+  { key: 'ai_enabled', value: 'true', category: 'ai' },
+  { key: 'language', value: 'id', category: 'general' },
+  { key: 'currency', value: 'IDR', category: 'general' },
+  { key: 'timezone', value: 'Asia/Jakarta', category: 'general' },
 ];
 
 // Default modules
 export const DEFAULT_MODULES = [
-    { id: 'products', name: 'Produk', slug: 'products', icon: 'package', description: 'Kelola produk dan inventori', enabled: 1, sort_order: 1 },
-    { id: 'pos', name: 'Kasir (POS)', slug: 'pos', icon: 'shopping-cart', description: 'Point of Sale - Penjualan', enabled: 1, sort_order: 2 },
-    { id: 'customers', name: 'Pelanggan', slug: 'customers', icon: 'users', description: 'Kelola data pelanggan', enabled: 1, sort_order: 3 },
-    { id: 'suppliers', name: 'Supplier', slug: 'suppliers', icon: 'truck', description: 'Kelola data supplier', enabled: 1, sort_order: 4 },
-    { id: 'transactions', name: 'Transaksi', slug: 'transactions', icon: 'receipt', description: 'Riwayat transaksi', enabled: 1, sort_order: 5 },
-    { id: 'expenses', name: 'Pengeluaran', slug: 'expenses', icon: 'credit-card', description: 'Catat pengeluaran', enabled: 1, sort_order: 6 },
-    { id: 'reports', name: 'Laporan', slug: 'reports', icon: 'bar-chart-3', description: 'Laporan dan analitik', enabled: 1, sort_order: 7 },
+  { id: 'products', name: 'Produk', slug: 'products', icon: 'package', description: 'Kelola produk dan inventori', enabled: 1, sort_order: 1 },
+  { id: 'pos', name: 'Kasir (POS)', slug: 'pos', icon: 'shopping-cart', description: 'Point of Sale - Penjualan', enabled: 1, sort_order: 2 },
+  { id: 'customers', name: 'Pelanggan', slug: 'customers', icon: 'users', description: 'Kelola data pelanggan', enabled: 1, sort_order: 3 },
+  { id: 'suppliers', name: 'Supplier', slug: 'suppliers', icon: 'truck', description: 'Kelola data supplier', enabled: 1, sort_order: 4 },
+  { id: 'transactions', name: 'Transaksi', slug: 'transactions', icon: 'receipt', description: 'Riwayat transaksi', enabled: 1, sort_order: 5 },
+  { id: 'expenses', name: 'Pengeluaran', slug: 'expenses', icon: 'credit-card', description: 'Catat pengeluaran', enabled: 1, sort_order: 6 },
+  { id: 'reports', name: 'Laporan', slug: 'reports', icon: 'bar-chart-3', description: 'Laporan dan analitik', enabled: 1, sort_order: 7 },
 ];
 
 // Generate UUID
 export function generateId(): string {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }

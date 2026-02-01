@@ -5,12 +5,15 @@ import { usePathname } from 'next/navigation';
 import {
     LayoutDashboard,
     Package,
-    ShoppingCart,
     Users,
+    Truck,
+    ShoppingCart,
     Receipt,
+    Wallet,
+    BarChart3,
     Database,
-    Settings,
     Bot,
+    Settings,
     ChevronLeft,
     ChevronRight,
     LogOut,
@@ -18,27 +21,65 @@ import {
 } from 'lucide-react';
 import { useUIStore, useSettingsStore, useAuthStore } from '@/lib/store';
 
+interface NavItem {
+    href: string;
+    label: string;
+    icon: React.ElementType;
+}
+
+interface NavGroup {
+    label: string;
+    items: NavItem[];
+}
+
 export default function Sidebar() {
     const pathname = usePathname();
     const { sidebarOpen, toggleSidebar } = useUIStore();
     const { settings } = useSettingsStore();
     const { user, logout } = useAuthStore();
 
-    // Static navigation items
-    const navItems = [
-        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/dashboard/products', label: 'Produk', icon: Package },
-        { href: '/dashboard/customers', label: 'Pelanggan', icon: Users },
-        { href: '/dashboard/pos', label: 'Kasir (POS)', icon: ShoppingCart },
-        { href: '/dashboard/transactions', label: 'Transaksi', icon: Receipt },
+    // Grouped navigation
+    const navGroups: NavGroup[] = [
+        {
+            label: '',
+            items: [
+                { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            ]
+        },
+        {
+            label: 'BISNIS',
+            items: [
+                { href: '/dashboard/products', label: 'Produk', icon: Package },
+                { href: '/dashboard/customers', label: 'Pelanggan', icon: Users },
+                { href: '/dashboard/suppliers', label: 'Supplier', icon: Truck },
+            ]
+        },
+        {
+            label: 'TRANSAKSI',
+            items: [
+                { href: '/dashboard/pos', label: 'Kasir (POS)', icon: ShoppingCart },
+                { href: '/dashboard/transactions', label: 'Penjualan', icon: Receipt },
+                { href: '/dashboard/expenses', label: 'Pengeluaran', icon: Wallet },
+            ]
+        },
+        {
+            label: 'LAPORAN',
+            items: [
+                { href: '/dashboard/reports', label: 'Laporan', icon: BarChart3 },
+            ]
+        },
     ];
 
-    const bottomItems = [
+    const systemItems: NavItem[] = [
         { href: '/dashboard/database', label: 'Database', icon: Database },
         { href: '/dashboard/ai', label: 'Asisten AI', icon: Bot },
         { href: '/dashboard/settings', label: 'Pengaturan', icon: Settings },
     ];
 
+    const isActive = (href: string) => {
+        if (href === '/dashboard') return pathname === href;
+        return pathname === href || pathname.startsWith(href + '/');
+    };
 
     return (
         <>
@@ -88,47 +129,69 @@ export default function Sidebar() {
 
                 {/* Navigation */}
                 <nav className="flex-1 overflow-y-auto py-4 px-3">
-                    <ul className="space-y-1">
-                        {navItems.map((item) => {
-                            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-                            const Icon = item.icon;
+                    {navGroups.map((group, groupIndex) => (
+                        <div key={groupIndex} className={group.label ? 'mt-4' : ''}>
+                            {/* Group Label */}
+                            {group.label && sidebarOpen && (
+                                <p className="px-3 mb-2 text-[10px] font-semibold tracking-wider text-gray-400 dark:text-gray-500 uppercase">
+                                    {group.label}
+                                </p>
+                            )}
+                            {group.label && !sidebarOpen && (
+                                <div className="my-2 mx-4 border-t border-gray-200 dark:border-gray-700" />
+                            )}
 
-                            return (
-                                <li key={item.href}>
-                                    <Link
-                                        href={item.href}
-                                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
-                                            ? 'bg-gradient-to-r text-white shadow-md'
-                                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                                            }`}
-                                        style={isActive ? {
-                                            backgroundImage: `linear-gradient(135deg, ${settings.primaryColor}, ${settings.secondaryColor})`
-                                        } : undefined}
-                                    >
-                                        <Icon size={20} className={sidebarOpen ? '' : 'mx-auto'} />
-                                        {sidebarOpen && <span className="font-medium">{item.label}</span>}
-                                    </Link>
-                                </li>
-                            );
-                        })}
-                    </ul>
+                            {/* Group Items */}
+                            <ul className="space-y-1">
+                                {group.items.map((item) => {
+                                    const active = isActive(item.href);
+                                    const Icon = item.icon;
+
+                                    return (
+                                        <li key={item.href}>
+                                            <Link
+                                                href={item.href}
+                                                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${active
+                                                    ? 'bg-gradient-to-r text-white shadow-md'
+                                                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                                                    }`}
+                                                style={active ? {
+                                                    backgroundImage: `linear-gradient(135deg, ${settings.primaryColor}, ${settings.secondaryColor})`
+                                                } : undefined}
+                                                title={!sidebarOpen ? item.label : undefined}
+                                            >
+                                                <Icon size={20} className={sidebarOpen ? '' : 'mx-auto'} />
+                                                {sidebarOpen && <span className="font-medium">{item.label}</span>}
+                                            </Link>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </div>
+                    ))}
                 </nav>
 
                 {/* Bottom Section */}
                 <div className="border-t border-gray-200 dark:border-gray-700 py-4 px-3">
+                    {sidebarOpen && (
+                        <p className="px-3 mb-2 text-[10px] font-semibold tracking-wider text-gray-400 dark:text-gray-500 uppercase">
+                            SISTEM
+                        </p>
+                    )}
                     <ul className="space-y-1">
-                        {bottomItems.map((item) => {
-                            const isActive = pathname === item.href;
+                        {systemItems.map((item) => {
+                            const active = isActive(item.href);
                             const Icon = item.icon;
 
                             return (
                                 <li key={item.href}>
                                     <Link
                                         href={item.href}
-                                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${active
                                             ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
                                             : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                                             }`}
+                                        title={!sidebarOpen ? item.label : undefined}
                                     >
                                         <Icon size={20} className={sidebarOpen ? '' : 'mx-auto'} />
                                         {sidebarOpen && <span className="font-medium">{item.label}</span>}
